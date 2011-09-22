@@ -1,6 +1,8 @@
 MU Filesystem
 =============
 
+Work in progress (not usable yet).
+
 Mount megaupload as a filesystem and get an awesome VOD @ home.
 
 Usage

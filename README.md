@@ -3,7 +3,7 @@ MU Filesystem
 
 Work in progress (not usable yet).
 
-Mount megaupload as a filesystem and get an awesome VOD @ home.
+Mount megaupload as a filesystem and get an awesome VOD channel @ home.
 
 Linux only (using fuse)
 
@@ -38,4 +38,10 @@ Pause, fastforward and so on are supported.
 Tips
 ====
 
-Share the mounted directory with SAMBA/VFS and play your library on your home theater (XBMC, boxee)
+Share the mounted directory with SAMBA/VFS and play your library on your favorite home theater (XBMC, boxee, ...)
+
+Install
+=======
+
+    # apt-get install libcurl4-nss-dev libsqlite3-dev libfuse-dev
+    $ gcc -Wall `pkg-config fuse --cflags --libs` -o mufs main.c log.c hash.c megaupload.c md5.c db.c -lcurl -lsqlite3

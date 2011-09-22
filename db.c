@@ -11,7 +11,6 @@
 static const char *db_file = "/home/para/dev/fuse/mufs.db";
 static const char *init_query = "CREATE TABLE mufiles(title VARCHAR(255) PRIMARY KEY, tag VARCHAR(12), size INT)";
 
-
 static int sqlite_callback(void *not_used, int argc, 
         char **argv, char **col_name)
 {

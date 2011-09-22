@@ -1,0 +1,6 @@
+* autotools
+* SQlite DB
+* mmap Ring buffer
+* BLOB video cache
+* command line login
+

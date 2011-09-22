@@ -12,7 +12,7 @@
 #include <fuse.h>
 #include "megaupload.h"
 #include "log.h"
-
+#include "md5.h"
 
 static const char *mu_login_url = "http://www.megaupload.com/mgr_login.php";
 static const char *mu_grab_url = "http://www.megaupload.com/mgr_dl.php?d=%s&u=%s";
@@ -88,6 +88,10 @@ mu_session_t *mu_login(const char *login, const char *pass)
     str_buffer_t buffer;
     CURL *curl;
     CURLcode response;
+    unsigned char md5sum[16];
+    char md5str[33];
+    md5_context ctx;
+    int i;
 
     mu = malloc(sizeof(mu_session_t));
     
@@ -106,8 +110,17 @@ mu_session_t *mu_login(const char *login, const char *pass)
     
     mu->uid[0] = '\0';
     
-    mu->creds = malloc(strlen(login) + strlen(pass) + 32);    
-    sprintf(mu->creds, "u=%s&b=0&p=%s", login, pass);
+    md5_starts(&ctx);
+    md5_update(&ctx, (unsigned char *)pass, strlen(pass));
+    md5_finish(&ctx, md5sum);
+    
+	for (i = 0; i < 16; i++) {
+		sprintf(md5str + (i*2), "%02x", md5sum[i]);
+	}
+	md5str[32] = '\0';
+    
+    mu->creds = malloc(strlen(login) + 64);    
+    sprintf(mu->creds, "u=%s&b=0&p=%s", login, md5str);
 
     curl_easy_setopt(curl, CURLOPT_POST, 1);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, mu->creds);
@@ -128,6 +141,13 @@ mu_session_t *mu_login(const char *login, const char *pass)
     if (buffer.length > 32) {
         memcpy(mu->uid, &buffer.ptr[2], 32);
         mu->uid[32] = '\0';
+            
+        log_msg("Loged to MU with uid <%s>\n", mu->uid);
+    } else {
+        log_msg("Failed to log with <%s>\n", login);
+        free(mu->creds);
+        free(mu);
+        mu = NULL;
     }
     
     free(buffer.ptr);
@@ -226,7 +246,7 @@ ssize_t mu_get_range(const char *file, size_t from,
     char range[64];
     
     if ((curl = curl_easy_init()) == NULL) {
-        return NULL;
+        return -1;
     }
     
     buffer->size     = size;
@@ -239,13 +259,13 @@ ssize_t mu_get_range(const char *file, size_t from,
     }
 
     curl_easy_setopt(curl, CURLOPT_URL, file);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _curl_read2);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _curl_read_fixed);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, buffer);
     curl_easy_setopt(curl, CURLOPT_RANGE, range);
 
     if ((response = curl_easy_perform(curl)) != 0) {
         curl_easy_cleanup(curl);
-        return NULL;
+        return -1;
     }
     
     curl_easy_cleanup(curl);
@@ -265,10 +285,8 @@ int main()
 {
     mu_session_t *mu;
     mu = mu_login("LezardSpock", "05c93e97be4f77f1a15f5a5cddba36b6");
-    //printf("Loged with : %s %d\n", mu->uid, mu_get_file_size(mu_get_file("T5UI61O3", mu)));
-    printf("Loged with : %s %d\n", mu->uid, mu_get_file_size(mu_get_file("FFJTRWKJ", mu)));
-    
-    //printf("Data : %s\n", mu_get_range(mu_get_file("T5UI61O3", mu), 10, 10));
+    printf("Loged with : %s\n", mu->uid);
+
     
     return 0;
 }

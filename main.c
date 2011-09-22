@@ -18,9 +18,12 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include "log.h"
+
 #include <curl/curl.h>
+
+#include "log.h"
 #include "megaupload.h"
+#include "main.h"
 
 static const char *entry_file = "/home/para/dev/fuse/list.txt";
 
@@ -114,39 +117,51 @@ static int mufs_read(const char *path, char *buf, size_t size, off_t offset,
 {
     str_buffer_t buffer;
     log_msg("Read file : %s - size : %d - offset : %d\n", path, size, offset);
-    /* TODO : directly pass buf to mu_get_range to avoid copy */
-    mu_get_range("http://www926.megaupload.com/files/e68ab188370102dd619ac6b9b9ad3731/Lost.Girl.S02E02.VOSTFR.720p.WEB-DL.AAC2.0.H.264-GKS.mkv", offset, size, &buffer);
     
-    memcpy(buf, (char *)buffer.ptr, buffer.length);
-    
-    free(buffer.ptr);
-    
+    buffer.ptr = (unsigned char *)buf;
+
+    mu_get_range("http://www926.megaupload.com/files/e68ab188370102dd619ac6b9b9ad3731/Lost.Girl.S02E02.VOSTFR.720p.WEB-DL.AAC2.0.H.264-GKS.mkv", offset, size, 1000, &buffer);
+
     return buffer.length;
-    //return pread(fi->fh, buf, size, offset);
+}
+
+static mu_state_t *mu_init_state()
+{
+    mu_state_t *mu_state;
+    
+    if ((mu_state = malloc(sizeof(mu_state_t))) == NULL)
+        return NULL;
+        
+    mu_state->logfile   = log_open();
+    mu_state->flist     = hashtbl_init();
+    
+    if (mu_state->flist == NULL)
+        return NULL;
+    
+    curl_global_init(CURL_GLOBAL_ALL);
+    
+    if ((mu_state->session = mu_login("LezardSpock", "***")) == NULL)
+        return NULL;
+    
+    return mu_state;
 }
 
 static struct fuse_operations mufs_oper = {
-  .getattr   = mufs_getattr,
-  .readdir = mufs_readdir,
-  .open   = mufs_open,
-  .read   = mufs_read,
-  .release = mufs_release
+    .getattr      = mufs_getattr,
+    .readdir      = mufs_readdir,
+    .open         = mufs_open,
+    .read         = mufs_read,
+    .release      = mufs_release
 };
 
 int main(int argc, char *argv[])
 {
-    struct bb_state *bb_data;
+    mu_state_t *mu_state;
     
-    curl_global_init(CURL_GLOBAL_ALL);
-    
-    bb_data = calloc(sizeof(struct bb_state), 1);
-    
-    if (bb_data == NULL) {
-	    perror("main calloc");
-	    abort();
+    if ((mu_state = mu_init_state()) == NULL) {
+        return 0;
     }
-    
-    bb_data->logfile = log_open();
 
-    return fuse_main(argc, argv, &mufs_oper, bb_data);
+    return fuse_main(argc, argv, &mufs_oper, mu_state);
 }
+

@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "main.h"
 #include "log.h"
 
 FILE *log_open()
@@ -22,8 +23,8 @@ FILE *log_open()
     // here.  If we can't open the logfile, we're dead.
     logfile = fopen("megaupfs.log", "w");
     if (logfile == NULL) {
-	perror("logfile");
-	exit(EXIT_FAILURE);
+	    perror("logfile");
+	    exit(EXIT_FAILURE);
     }
     
     // set logfile to line buffering
@@ -36,8 +37,13 @@ void log_msg(const char *format, ...)
 {
     va_list ap;
     va_start(ap, format);
+    
+    if (MU_DATA == NULL) {
+        vprintf(format, ap);
+        return;
+    }
 
-    vfprintf(BB_DATA->logfile, format, ap);
+    vfprintf(MU_DATA->logfile, format, ap);
 }
     
 // struct fuse_file_info keeps information about files (surprise!).

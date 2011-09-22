@@ -5,11 +5,7 @@
 //  macro to log fields in structs.
 #define log_struct(st, field, format, typecast) \
   log_msg("    " #field " = " #format "\n", typecast st->field)
-struct bb_state {
-    FILE *logfile;
-    char *rootdir;
-};
-#define BB_DATA ((struct bb_state *) fuse_get_context()->private_data)
+
 
 FILE *log_open(void);
 void log_fi (struct fuse_file_info *fi);

@@ -53,11 +53,16 @@ static int _curl_read(void *ptr, size_t size, size_t num, str_buffer_t *buffer)
         buffer->size = 0;
         buffer->length = 0;
         buffer->ptr = malloc(size * num + 1);
+        
+        if (buffer->ptr == NULL)
+            return 0;
+            
     } else {
         buffer->ptr = realloc(buffer->ptr, buffer->size + (size * num) + 1);
+        if (buffer->ptr == NULL)
+            return 0;
     }
 
-    
     memcpy(buffer->ptr + buffer->length, ptr, size * num);
 
     buffer->size = buffer->size + (size * num) + 1;
@@ -71,7 +76,9 @@ static int _curl_read(void *ptr, size_t size, size_t num, str_buffer_t *buffer)
 static int _curl_read_fixed(void *ptr, size_t size, size_t num,
             str_buffer_t *buffer)
 {
-    if (buffer == NULL || buffer->length + (size*num) > buffer->size) {
+    if (buffer == NULL || 
+        buffer->length + (size*num) > buffer->size) {
+        
         return num;
     }
 
@@ -88,9 +95,9 @@ mu_session_t *mu_login(const char *login, const char *pass)
     str_buffer_t buffer;
     CURL *curl;
     CURLcode response;
+    md5_context ctx;
     unsigned char md5sum[16];
     char md5str[33];
-    md5_context ctx;
     int i;
 
     mu = malloc(sizeof(mu_session_t));
@@ -184,13 +191,11 @@ size_t mu_get_file_size(const char *file)
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, _curl_content_length_get);
     curl_easy_setopt(curl, CURLOPT_WRITEHEADER, &cl);
 
-    if ((response = curl_easy_perform(curl)) != 0) {
+    if ((response = curl_easy_perform(curl)) != 0 || cl.ptr == NULL) {
         curl_easy_cleanup(curl);
         return 0;
     }
-    
-    if (cl.ptr == NULL) return 0;
-    
+
     ret = atoi((char *)cl.ptr);
     free(cl.ptr);
     
@@ -238,6 +243,11 @@ char *mu_get_file(const char *mucode, mu_session_t *mu)
 
 }
 
+/*
+    TODO :
+    - use the same curl session
+    - use a ring buffer and request more data (cache)
+*/
 ssize_t mu_get_range(const char *file, size_t from, 
         size_t size, size_t fsize, str_buffer_t *buffer)
 {

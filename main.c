@@ -2,7 +2,7 @@
     (c) Anthony Catel <a.catel@weelya.com> - 2011
     GPL v2
     
-    build : gcc -Wall `pkg-config fuse --cflags --libs` -o hello main.c log.c hash.c megaupload.c md5.c -lcurl
+    build : gcc -Wall `pkg-config fuse --cflags --libs` -o mufs main.c log.c hash.c megaupload.c md5.c -lcurl
 */
 
 #define FUSE_USE_VERSION  26
@@ -22,13 +22,14 @@
 #include <unistd.h>
 
 #include <curl/curl.h>
+#include <sqlite3.h>
 
 #include "log.h"
 #include "megaupload.h"
+#include "db.h"
 #include "main.h"
 
 static const char *entry_file = "/home/para/dev/fuse/list.txt";
-static const char *db_file = "/home/para/dev/fuse/mufs.db";
 
 static int mufs_getattr(const char *path, struct stat *stbuf)
 {
@@ -160,7 +161,7 @@ static int mufs_read(const char *path, char *buf, size_t size, off_t offset,
 static mu_state_t *mu_init_state()
 {
     mu_state_t *mu_state;
-    
+        
     if ((mu_state = malloc(sizeof(mu_state_t))) == NULL)
         return NULL;
         
@@ -170,9 +171,12 @@ static mu_state_t *mu_init_state()
     if (mu_state->flist == NULL)
         return NULL;
     
+    if ((mu_state->db = mu_init_db()) == NULL)
+        return NULL;
+    
     curl_global_init(CURL_GLOBAL_ALL);
     
-    if ((mu_state->session = mu_login("LezardSpock", "****")) == NULL)
+    if ((mu_state->session = mu_login("LezardSpock", "artefis")) == NULL)
         return NULL;
     
     return mu_state;

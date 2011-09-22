@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <sqlite3.h>
 #include "hash.h"
 #include "megaupload.h"
 
@@ -16,6 +17,7 @@ typedef struct
     FILE *logfile;
     HTBL *flist;
     mu_session_t *session;
+    sqlite3 *db;
 } mu_state_t;
 
 typedef struct

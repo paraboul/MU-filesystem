@@ -30,6 +30,7 @@ How it works
 
 You see files just like if they were on your local disk.
 You just have to open your favorite media player and enjoy ;)
+
 Pause, fastforward and so on are supported.
 
 Tips

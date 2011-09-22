@@ -114,10 +114,10 @@ mu_session_t *mu_login(const char *login, const char *pass)
     md5_update(&ctx, (unsigned char *)pass, strlen(pass));
     md5_finish(&ctx, md5sum);
     
-	for (i = 0; i < 16; i++) {
-		sprintf(md5str + (i*2), "%02x", md5sum[i]);
-	}
-	md5str[32] = '\0';
+    for (i = 0; i < 16; i++) {
+        sprintf(md5str + (i*2), "%02x", md5sum[i]);
+    }
+    md5str[32] = '\0';
     
     mu->creds = malloc(strlen(login) + 64);    
     sprintf(mu->creds, "u=%s&b=0&p=%s", login, md5str);

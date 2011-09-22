@@ -19,6 +19,7 @@ Create a list.txt with the following format :
     Breaking.Bad.S04E09.avi http://www.megaupload.com/?d=TO793Y02
 
 Mount using :
+
     $ mufs </path/to/list.txt> <mount point> -omu:<MU user:Mu password>
 
 

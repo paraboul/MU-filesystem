@@ -176,7 +176,7 @@ static mu_state_t *mu_init_state()
     
     curl_global_init(CURL_GLOBAL_ALL);
     
-    if ((mu_state->session = mu_login("LezardSpock", "artefis")) == NULL)
+    if ((mu_state->session = mu_login("LezardSpock", "***")) == NULL)
         return NULL;
     
     return mu_state;

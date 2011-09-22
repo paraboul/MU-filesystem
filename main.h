@@ -1,3 +1,8 @@
+/*
+    (c) Anthony Catel <a.catel@weelya.com> - 2011
+    GPL v2
+*/
+
 #ifndef _MUMAIN_H_
 #define _MUMAIN_H_
 

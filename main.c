@@ -1,6 +1,8 @@
 /*
     (c) Anthony Catel <a.catel@weelya.com> - 2011
     GPL v2
+    
+    build : gcc -Wall `pkg-config fuse --cflags --libs` -o hello main.c log.c hash.c megaupload.c md5.c -lcurl
 */
 
 #define FUSE_USE_VERSION  26
@@ -26,6 +28,7 @@
 #include "main.h"
 
 static const char *entry_file = "/home/para/dev/fuse/list.txt";
+static const char *db_file = "/home/para/dev/fuse/mufs.db";
 
 static int mufs_getattr(const char *path, struct stat *stbuf)
 {

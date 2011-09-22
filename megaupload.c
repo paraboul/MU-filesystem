@@ -284,7 +284,7 @@ ssize_t mu_get_range(const char *file, size_t from,
 int main()
 {
     mu_session_t *mu;
-    mu = mu_login("LezardSpock", "05c93e97be4f77f1a15f5a5cddba36b6");
+    mu = mu_login("LezardSpock", "****");
     printf("Loged with : %s\n", mu->uid);
 
     

@@ -1,8 +1,3 @@
-// Since the point of this filesystem is to learn FUSE and its
-// datastructures, I want to see *everything* that happens related to
-// its data structures.  This file contains macros and functions to
-// accomplish this.
-
 #include <fuse.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -18,9 +13,7 @@
 FILE *log_open()
 {
     FILE *logfile;
-    
-    // very first thing, open up the logfile and mark that we got in
-    // here.  If we can't open the logfile, we're dead.
+
     logfile = fopen("megaupfs.log", "w");
     if (logfile == NULL) {
 	    perror("logfile");
@@ -46,7 +39,6 @@ void log_msg(const char *format, ...)
     vfprintf(MU_DATA->logfile, format, ap);
 }
     
-// struct fuse_file_info keeps information about files (surprise!).
 // This dumps all the information in a struct fuse_file_info.  The struct
 // definition, and comments, come from /usr/include/fuse/fuse_common.h
 // Duplicated here for convenience.

@@ -1,6 +1,10 @@
+/*
+    (c) Anthony Catel <a.catel@weelya.com> - 2011
+    GPL v2
+*/
+
 #ifndef _MU_H_
 #define _MU_H_
-
 
 typedef struct
 {

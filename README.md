@@ -5,6 +5,8 @@ Work in progress (not usable yet).
 
 Mount megaupload as a filesystem and get an awesome VOD @ home.
 
+Linux only (using fuse)
+
 Usage
 =====
 

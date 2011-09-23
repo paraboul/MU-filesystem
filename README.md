@@ -40,8 +40,8 @@ Tips
 
 Share the mounted directory with SAMBA/VFS and play your library on your favorite home theater (XBMC, boxee, ...)
 
-Install
-=======
+Build
+=====
 
     # apt-get install libcurl4-nss-dev libsqlite3-dev libfuse-dev
     $ gcc -Wall `pkg-config fuse --cflags --libs` -o mufs main.c log.c hash.c megaupload.c md5.c db.c -lcurl -lsqlite3

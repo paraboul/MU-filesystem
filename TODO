@@ -1,6 +1,6 @@
 * autotools
-* SQlite DB
 * mmap Ring buffer
 * BLOB video cache
 * command line login
+* Optimistic remote reading/caching (pre-read to consume later)
 

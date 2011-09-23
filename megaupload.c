@@ -256,6 +256,7 @@ ssize_t mu_get_range(const char *file, size_t from,
     char range[64];
     
     if ((curl = curl_easy_init()) == NULL) {
+        log_msg("Failed to init curl\n");
         return -1;
     }
     
@@ -267,6 +268,8 @@ ssize_t mu_get_range(const char *file, size_t from,
     } else {
         sprintf(range, "%d-%d", from, (from+size)-1);
     }
+    
+    log_msg("Request range : %s\n", range);
 
     curl_easy_setopt(curl, CURLOPT_URL, file);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _curl_read_fixed);
@@ -274,6 +277,7 @@ ssize_t mu_get_range(const char *file, size_t from,
     curl_easy_setopt(curl, CURLOPT_RANGE, range);
 
     if ((response = curl_easy_perform(curl)) != 0) {
+        log_msg("Failed to perform curl %s (%s)\n", file, curl_easy_strerror(response));
         curl_easy_cleanup(curl);
         return -1;
     }

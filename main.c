@@ -52,7 +52,7 @@ static int mufs_getattr(const char *path, struct stat *stbuf)
             
             if (mu_file->url == NULL)
                 mu_file->url = mu_get_file(mu_file->tag, state->session);
-            
+                
             mu_file->size   = mu_get_file_size(mu_file->url);
             
             mu_insert_file(mu_file->title, mu_file->size);
@@ -118,30 +118,24 @@ static int mufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         
         filler(buf, title, NULL, 0);
     }
+    
+    fclose(lst);
 
     return 0;
 }
 
 static int mufs_open(const char *path, struct fuse_file_info *fi)
 {
-
-    #if 0
-    fd = open("/home/para/dev/fuse/futurama.mkv", fi->flags);
+    mu_state_t *state = MU_DATA;
+    mu_file_t *mu_file;
     
-    if (fd < 0) {
-        log_msg("cant open file\n");
-        return -EACCES;
+    if ((mu_file = hashtbl_seek(state->flist, &path[1])) == NULL) {
+        return -ENOENT;
     }
     
-    fi->fh = fd;
-    
-    log_msg("open file %s\n", path);
-    /*if(strcmp(path, mufs_path) != 0)
-        return -ENOENT;
-
-    if((fi->flags & 3) != O_RDONLY)
-        return -EACCES;*/
-    #endif
+    if (mu_file->url == NULL) {
+        mu_file->url = mu_get_file(mu_file->tag, state->session);
+    }
 
     return 0;
 }

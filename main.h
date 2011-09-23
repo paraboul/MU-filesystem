@@ -17,7 +17,6 @@ typedef struct
     FILE *logfile;
     HTBL *flist;
     mu_session_t *session;
-    sqlite3 *db;
 } mu_state_t;
 
 typedef struct

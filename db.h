@@ -9,6 +9,11 @@
 #include <unistd.h>
 #include <sqlite3.h>
 
-sqlite3 *mu_init_db();
+#include "main.h"
+
+int mu_init_db();
+int mu_insert_file(const char *title, size_t size);
+
+mu_file_t *mu_db_get_infos(char *title);
 
 #endif

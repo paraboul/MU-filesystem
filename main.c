@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <curl/curl.h>
 #include <sqlite3.h>
@@ -46,10 +47,15 @@ static int mufs_getattr(const char *path, struct stat *stbuf)
     } else if ((mu_file = hashtbl_seek(state->flist, &path[1])) != NULL) {
         log_msg("Get attr %s\n", path);
         
-        if (mu_file->url == NULL) {
+        if (mu_file->size == 0) {
             log_msg("Init file info %s\n", path);
-            mu_file->url    = mu_get_file(mu_file->tag, state->session);
+            
+            if (mu_file->url == NULL)
+                mu_file->url = mu_get_file(mu_file->tag, state->session);
+            
             mu_file->size   = mu_get_file_size(mu_file->url);
+            
+            mu_insert_file(mu_file->title, mu_file->size);
         }
         
         stbuf->st_mode = S_IFREG | 0444;
@@ -66,9 +72,10 @@ static int mufs_getattr(const char *path, struct stat *stbuf)
 static int mufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                        off_t offset, struct fuse_file_info *fi)
 {
-    FILE *lst;
     (void) offset;
     (void) fi;
+    
+    FILE *lst;
     char url[512];
     char title[512];
     
@@ -91,11 +98,20 @@ static int mufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         mu_file_t *mu_file;
         
         if ((mu_file = hashtbl_seek(state->flist, title)) == NULL) {
-            mu_file = malloc(sizeof(mu_file_t));
-            mu_file->title = strdup(title);
+            
+            if ((mu_file = mu_db_get_infos(title)) == NULL) {
+                            
+                mu_file = malloc(sizeof(mu_file_t));
+
+                mu_file->size = 0;
+                mu_file->title = strdup(title);
+                
+            } else {
+                log_msg("Grab info from BDD\n");
+            }
+            
             mu_file->tag = strdup(strchr(url, '=')+1);
             mu_file->url = NULL;
-            mu_file->size = 0;
             
             hashtbl_append(state->flist, title, mu_file);
         }
@@ -161,6 +177,8 @@ static int mufs_read(const char *path, char *buf, size_t size, off_t offset,
 static mu_state_t *mu_init_state()
 {
     mu_state_t *mu_state;
+    
+    signal(SIGPIPE, SIG_IGN);
         
     if ((mu_state = malloc(sizeof(mu_state_t))) == NULL)
         return NULL;
@@ -171,12 +189,12 @@ static mu_state_t *mu_init_state()
     if (mu_state->flist == NULL)
         return NULL;
     
-    if ((mu_state->db = mu_init_db()) == NULL)
+    if (!mu_init_db())
         return NULL;
     
     curl_global_init(CURL_GLOBAL_ALL);
     
-    if ((mu_state->session = mu_login("LezardSpock", "***")) == NULL)
+    if ((mu_state->session = mu_login("LezardSpock", "****")) == NULL)
         return NULL;
     
     return mu_state;
@@ -197,7 +215,7 @@ int main(int argc, char *argv[])
     if ((mu_state = mu_init_state()) == NULL) {
         return 0;
     }
-
+    
     return fuse_main(argc, argv, &mufs_oper, mu_state);
 }
 

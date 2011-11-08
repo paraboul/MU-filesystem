@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
 
 #include <curl/curl.h>
 #include <sqlite3.h>
@@ -45,10 +46,9 @@ static int mufs_getattr(const char *path, struct stat *stbuf)
         stbuf->st_nlink = 2;
         
     } else if ((mu_file = hashtbl_seek(state->flist, &path[1])) != NULL) {
-        log_msg("Get attr %s\n", path);
-        
+
         if (mu_file->size == 0) {
-            log_msg("Init file info %s\n", path);
+            printf("Init file info %s\n", path);
             
             if (mu_file->url == NULL)
                 mu_file->url = mu_get_file(mu_file->tag, state->session);
@@ -63,7 +63,6 @@ static int mufs_getattr(const char *path, struct stat *stbuf)
         stbuf->st_size = mu_file->size;
         
     } else {
-        log_msg("Get attr not found %s\n", path);
         res = -ENOENT;
     }
     return res;
@@ -85,9 +84,7 @@ static int mufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       return -ENOENT;
     
     lst = fopen(entry_file, "r");
-    
-    log_msg("readdir : %s\n", path);
-    
+
     if (lst == NULL)
         return -ENOENT;
 
@@ -100,19 +97,27 @@ static int mufs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         if ((mu_file = hashtbl_seek(state->flist, title)) == NULL) {
             
             if ((mu_file = mu_db_get_infos(title)) == NULL) {
-                            
+
                 mu_file = malloc(sizeof(mu_file_t));
 
                 mu_file->size = 0;
                 mu_file->title = strdup(title);
-                
-            } else {
-                log_msg("Grab info from BDD\n");
-            }
+
+            } /* else : grab from BDD */
             
             mu_file->tag = strdup(strchr(url, '=')+1);
-            mu_file->url = NULL;
+            mu_file->url = NULL;      
+            mu_file->buffer.data = NULL;
             
+            mu_file->requested.offset       = 0;
+            mu_file->requested.size         = 0;
+            mu_file->requested.expected     = 0;
+            mu_file->requested.kill         = 0;
+            mu_file->dl_thread.isrunning    = 0;
+            
+            pthread_mutex_init(&mu_file->dl_thread.read, NULL);
+            pthread_mutex_init(&mu_file->dl_thread.threadrun, NULL);
+                            
             hashtbl_append(state->flist, title, mu_file);
         }
         
@@ -143,9 +148,7 @@ static int mufs_open(const char *path, struct fuse_file_info *fi)
 int mufs_release(const char *path, struct fuse_file_info *fi)
 {
 
-    log_msg("\nmufs_release(path=\"%s\", fi=0x%08x)\n",
-	  path, fi);
-
+    
     //return close(fi->fh);
     return 0;
 }
@@ -159,12 +162,16 @@ static int mufs_read(const char *path, char *buf, size_t size, off_t offset,
     
     mu_file = hashtbl_seek(state->flist, &path[1]);
     
-    log_msg("Read file : %s - size : %d - offset : %d\n", path, size, offset);
+    printf("Read file : %s - size : %d - offset : %d\n", path, size, offset);
     
     buffer.ptr = (unsigned char *)buf;
 
-    mu_get_range(mu_file->url, offset, size, mu_file->size, &buffer);
-
+    pthread_mutex_lock(&mu_file->dl_thread.read);
+    printf("Ask for %d\n", size);
+    mu_get_range(mu_file, offset, size, &buffer);
+    pthread_mutex_unlock(&mu_file->dl_thread.read);
+    printf("Got : %d\n", buffer.length);
+    
     return buffer.length;
 }
 

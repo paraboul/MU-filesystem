@@ -9,7 +9,7 @@ LIBS=
 
 export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
 
-PKG_CHECK_MODULES(MUFS, [fuse >= 2.2 glib-2.0 gthread-2.0 libcurl sqlite3 > 3.3])
+PKG_CHECK_MODULES(MUFS, [fuse >= 2.2 libcurl sqlite3 > 3.3])
 
 CFLAGS="$CFLAGS -Wall -W"
 

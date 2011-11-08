@@ -10,9 +10,11 @@
 #include <unistd.h>
 #include <curl/curl.h>
 #include <fuse.h>
+#include <pthread.h>
 #include "megaupload.h"
 #include "log.h"
 #include "md5.h"
+#include "main.h"
 
 static const char *mu_login_url = "http://www.megaupload.com/mgr_login.php";
 static const char *mu_grab_url = "http://www.megaupload.com/mgr_dl.php?d=%s&u=%s";
@@ -89,6 +91,41 @@ static int _curl_read_fixed(void *ptr, size_t size, size_t num,
     return num;
 }
 
+static int _curl_read_thread(void *ptr, size_t size, size_t num,
+            mu_file_t *mu_file)
+{
+    size_t end, end_r;
+    
+    if (mu_file->requested.kill) {
+        mu_file->requested.kill = 0;
+        printf("Thread is about to be killed\n");
+        return -1;
+    }
+
+    if (mu_file->buffer.length + (size*num) > mu_file->buffer.allocated) {
+        mu_file->buffer.offset += mu_file->buffer.length + (size * num);
+        mu_file->buffer.length = 0;
+        printf("Overflow\n");
+    } 
+    
+    memcpy(mu_file->buffer.data + mu_file->buffer.length, ptr, size*num);
+    
+    mu_file->buffer.length += size*num;
+    end = mu_file->buffer.offset + mu_file->buffer.length;
+    end_r = mu_file->requested.offset + mu_file->requested.size;
+    
+    if (mu_file->requested.size != 0 && 
+            mu_file->requested.offset >= mu_file->requested.offset &&
+            end >= end_r) {
+        
+        mu_file->requested.size = 0;
+        printf("Unlock\n");
+        pthread_mutex_unlock(&mu_file->dl_thread.ready);
+    }
+    
+    return num;
+}
+
 mu_session_t *mu_login(const char *login, const char *pass)
 {
     mu_session_t *mu;
@@ -110,7 +147,7 @@ mu_session_t *mu_login(const char *login, const char *pass)
         free(mu);
         return NULL;
     }
-    
+
     buffer.size     = 0;
     buffer.length   = 0;
     buffer.ptr      = NULL;    
@@ -149,9 +186,9 @@ mu_session_t *mu_login(const char *login, const char *pass)
         memcpy(mu->uid, &buffer.ptr[2], 32);
         mu->uid[32] = '\0';
             
-        log_msg("Loged to MU with uid <%s>\n", mu->uid);
+        printf("Loged to MU with uid <%s>\n", mu->uid);
     } else {
-        log_msg("Failed to log with <%s>\n", login);
+        printf("Failed to log with <%s>\n", login);
         free(mu->creds);
         free(mu);
         mu = NULL;
@@ -221,7 +258,7 @@ char *mu_get_file(const char *mucode, mu_session_t *mu)
     
     location.size     = 0;
     location.length   = 0;
-    location.ptr      = NULL;    
+    location.ptr      = NULL;
         
     sprintf(mu_url, mu_grab_url, mucode, mu->uid);
 
@@ -243,41 +280,186 @@ char *mu_get_file(const char *mucode, mu_session_t *mu)
 
 }
 
+void *mu_thread_download(void *arg)
+{
+    CURL *curl;
+    CURLcode response;
+    char range[64];
+    size_t from, size;
+    mu_file_t *mu_file;
+    struct mu_dl_args_s *args = (struct mu_dl_args_s *)arg;
+    
+    mu_file = args->file;
+    from    = args->from;
+    size    = args->size;
+    
+    printf("Thread for (%d-%d)\n", from, from+size);
+    
+    if ((curl = curl_easy_init()) == NULL) {
+        printf("Failed to init curl\n");
+        mu_file->requested.kill = 0;
+        mu_file->dl_thread.isrunning = 0;
+
+        return NULL;
+    }
+    
+    if (mu_file->buffer.data == NULL) {
+        mu_file->buffer.data = malloc(MU_BUFFER_SIZE);
+        if (mu_file->buffer.data == NULL) {
+            printf("Cannot allocate memory\n");
+            mu_file->requested.kill = 0;
+            mu_file->dl_thread.isrunning = 0;
+
+            return NULL;
+        }
+        mu_file->buffer.allocated = MU_BUFFER_SIZE;
+    }
+    
+    mu_file->buffer.length = 0;
+    mu_file->buffer.offset = from;
+    
+    sprintf(range, "%d-", from);
+    
+    curl_easy_setopt(curl, CURLOPT_URL, mu_file->url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _curl_read_thread);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, mu_file);
+    curl_easy_setopt(curl, CURLOPT_RANGE, range);
+
+    if ((response = curl_easy_perform(curl)) != 0) {
+        printf("Thread terminated (%d-%d)\n", from, from+size);
+        curl_easy_cleanup(curl);
+        free(args);
+        
+        mu_file->requested.kill = 0;
+        mu_file->dl_thread.isrunning = 0;
+
+        return NULL;
+    }
+    
+    printf("Thread ended  (%d-%d)\n", from, from+size);
+    
+    curl_easy_cleanup(curl);
+
+    free(args);
+    
+    mu_file->requested.kill = 0;
+    mu_file->dl_thread.isrunning = 0;
+
+    return NULL;
+}
+
+ssize_t mu_get_range(mu_file_t *mu_file, size_t from, 
+        size_t size, str_buffer_t *buffer)
+{
+    struct mu_dl_args_s *args;
+    static int npass = 0;
+    int npass_ = 0;
+    
+    npass++;
+    npass_ = npass;
+    
+    if (from+size > mu_file->size) {
+        size = mu_file->size - from;
+    }
+    
+    if (mu_file->requested.expected != from) {
+        printf("[%d] Pre jump (%d but %d)\n", npass_, mu_file->requested.expected, from);
+        mu_file->requested.kill = 1;
+        printf("[%d] Wait for old to terminate...\n", npass_);
+        pthread_join(mu_file->dl_thread.thread, NULL);
+        mu_file->requested.kill = 0;
+        printf("[%d] Success terminated %d\n", npass_, mu_file->requested.kill);
+        pthread_mutex_destroy(&mu_file->dl_thread.ready);
+    }
+    
+    printf("[%d] Requested : %d of size %d (%d-%d) (%d)\n", npass_, from, size, from, from+size, mu_file->requested.kill);
+    
+    mu_file->requested.offset = from;
+
+    if (!mu_file->dl_thread.isrunning) {
+        printf("[%d] About to summon thread %d\n", npass_, mu_file->requested.kill);
+        args = malloc(sizeof(struct mu_dl_args_s));
+        args->file = mu_file;
+        args->from = from;
+        args->size = size;
+        
+        pthread_mutex_init(&mu_file->dl_thread.ready, NULL);
+        pthread_mutex_lock(&mu_file->dl_thread.ready);
+
+        mu_file->requested.size = size;
+        
+        mu_file->dl_thread.isrunning = 1;
+
+        pthread_create(&mu_file->dl_thread.thread, NULL, 
+                            mu_thread_download, args);
+    }
+    
+    mu_file->requested.size = size;
+    mu_file->requested.expected = from+size;
+    
+    printf("[%d] Wait for data...\n", npass_);
+    pthread_mutex_lock(&mu_file->dl_thread.ready);
+    printf("[%d] Done.\n", npass_);
+    
+    memcpy(buffer->ptr, 
+        mu_file->buffer.data + (from - mu_file->buffer.offset), size);
+
+    buffer->length = size;
+    
+    return 0;
+}
+
 /*
     TODO :
     - use the same curl session
     - use a ring buffer and request more data (cache)
 */
-ssize_t mu_get_range(const char *file, size_t from, 
-        size_t size, size_t fsize, str_buffer_t *buffer)
+#if 0
+ssize_t mu_get_range(mu_file_t *mu_file, size_t from, 
+        size_t size, str_buffer_t *buffer)
 {
     CURL *curl;
     CURLcode response;
     char range[64];
     
     if ((curl = curl_easy_init()) == NULL) {
-        log_msg("Failed to init curl\n");
+        printf("Failed to init curl\n");
         return -1;
+    }
+    
+    if (mu_file->buffer.data == NULL) {
+        mu_file->buffer.data = malloc(8L * 1024L * 1024L);
+        if (mu_file->buffer.data == NULL) {
+            printf("Cannot allocate memory\n");
+            return -1;
+        }
+        mu_file->buffer.allocated = 8L * 1024L * 1024L;
+        mu_file->buffer.length = 0;
+        mu_file->buffer.offset = 0;
+    }
+    
+    if (size + from <= mu_file->buffer.length + mu_file->buffer.offset) {
+        
     }
     
     buffer->size     = size;
     buffer->length   = 0;
     
-    if (from+size > fsize) {
+    if (from+size > mu_file->size) {
         sprintf(range, "%d-", from);
     } else {
         sprintf(range, "%d-%d", from, (from+size)-1);
     }
     
-    log_msg("Request range : %s\n", range);
+    printf("Request range : %s\n", range);
 
-    curl_easy_setopt(curl, CURLOPT_URL, file);
+    curl_easy_setopt(curl, CURLOPT_URL, mu_file->url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _curl_read_fixed);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, buffer);
     curl_easy_setopt(curl, CURLOPT_RANGE, range);
 
     if ((response = curl_easy_perform(curl)) != 0) {
-        log_msg("Failed to perform curl %s (%s)\n", file, curl_easy_strerror(response));
+        printf("Failed to perform curl %s (%s)\n", mu_file->url, curl_easy_strerror(response));
         curl_easy_cleanup(curl);
         return -1;
     }
@@ -285,14 +467,15 @@ ssize_t mu_get_range(const char *file, size_t from,
     curl_easy_cleanup(curl);
     
     if (buffer->length != size) {
-        log_msg("MU size doesnt match\n");
+        printf("MU size doesnt match\n");
         return -1;
     }
     
-    log_msg("Requested : %d - %d\n", size, buffer->length);
+    printf("Requested : %d - %d\n", size, buffer->length);
     
     return size;
 }
+#endif
 
 #if 0
 int main()

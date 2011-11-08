@@ -30,20 +30,25 @@ int mu_insert_file(const char *title, size_t size)
     sqlite3 *db;
     sqlite3_stmt *stmt;
     
-    if (sqlite3_open(db_file, &db))
+    printf("Insert... %s %d\n", title, size);
+    
+    if (sqlite3_open_v2(db_file, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL))
         return 0;
         
     if (sqlite3_prepare_v2(db, insert_query, -1, &stmt, NULL) != SQLITE_OK ||
             sqlite3_bind_text(stmt, 1, title, strlen(title), SQLITE_STATIC) != SQLITE_OK ||
             sqlite3_bind_int(stmt, 2, size) != SQLITE_OK ||
             sqlite3_step(stmt) != SQLITE_DONE) {
-            
-        sqlite3_close(db);
+
+            printf("Unable to exec query %s\n", sqlite3_errmsg(db));
         
-        printf("Unable to exec query\n");
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+                
         return 0;
     }
     
+    sqlite3_finalize(stmt);
     sqlite3_close(db);
     
     printf("Query done\n");
@@ -54,21 +59,22 @@ int mu_insert_file(const char *title, size_t size)
 mu_file_t *mu_db_get_infos(char *title)
 {
     sqlite3 *db;
-    sqlite3_stmt *stmt;
+    sqlite3_stmt *stmt = NULL;
     mu_file_t *mu_file;
-    
+
     const char *query = "SELECT size from mufiles WHERE title=? LIMIT 1";
-    
-    if (sqlite3_open(db_file, &db))
+
+    if (sqlite3_open_v2(db_file, &db, SQLITE_OPEN_READONLY, NULL))
         return NULL;
         
     if (sqlite3_prepare_v2(db, query, -1, &stmt, NULL) != SQLITE_OK ||
             sqlite3_bind_text(stmt, 1, title, strlen(title), SQLITE_STATIC) != SQLITE_OK ||
             sqlite3_step(stmt) != SQLITE_ROW) {
-            
-        sqlite3_close(db);
         
-        printf("No result\n");
+        sqlite3_finalize(stmt);
+        sqlite3_close(db);
+        printf("No result %s\n", sqlite3_errmsg(db));
+        
         return NULL;
     }
     
@@ -78,7 +84,10 @@ mu_file_t *mu_db_get_infos(char *title)
     mu_file->tag = NULL;
     mu_file->url = NULL;
     mu_file->size = sqlite3_column_int(stmt, 0);
-
+    
+    printf("Found : %s\n", mu_file->title);
+    
+    sqlite3_finalize(stmt);
     sqlite3_close(db);
     
     return mu_file;
@@ -89,8 +98,8 @@ int mu_init_db()
     sqlite3 *db;
     int rc;
     char *sqlerr = NULL;
-    
-    if ((rc = sqlite3_open(db_file, &db)))
+
+    if ((rc = sqlite3_open_v2(db_file, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL)))
         return 0;
         
     sqlite3_exec(db, init_query, sqlite_callback, NULL, &sqlerr);    
